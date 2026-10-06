@@ -3,7 +3,7 @@ import jax.numpy as jnp
 from flax import nnx
 from tokenizer import Tokenizer
 from config import Config
-from data_gen import train, test
+from data_gen import gen_data
 import numpy as np
 from checkpoint import load_model
 
@@ -53,6 +53,7 @@ def evaluate(model, config, tok, data, chunk=5000):
 if __name__ == "__main__":
     config =Config().config
     tokenizer = Tokenizer()
+    train, test = gen_data(config, tokenizer)
     model = load_model(config)
     correct = evaluate(model, config, tokenizer, test)
 

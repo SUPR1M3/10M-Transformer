@@ -1,0 +1,5 @@
+flax==0.12.10
+optax==0.2.8
+orbax-checkpoint==0.12.6
+pandas
+matplotlib

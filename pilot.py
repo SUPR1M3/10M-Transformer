@@ -10,7 +10,7 @@ N_DIGITS = 10
 eval_data = sample_batch(jax.random.key(12345), 20_000, N_DIGITS)   # fixed held-out set
 
 #55k, 450k, 3M
-for L, D in [(2, 48), (3, 112)]:#, (5, 224)]:
+for L, D in [(2, 48), (3, 112), (5, 224)]:
     for lr in [1e-3, 3e-3]:
         cfg = make_config(L, D, max_digits=N_DIGITS, lr=lr)
         t0 = time.time()

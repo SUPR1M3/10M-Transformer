@@ -37,7 +37,7 @@ def train_run(config, n_tokens, eval_data, eval_every=None, curve_eval_size=4096
     return {"N": n_params(model), "N_total": n_params(model, False),
             "D": steps * config["B"] * T, "steps": steps, "loss": final, "curve": curve}
 
-eval_data = sample_batch(jax.random.key(12345), 20_000, 5)   # fixed held-out set
+# eval_data = sample_batch(jax.random.key(12345), 20_000, 5)   # fixed held-out set
 
 #dry run with 55k, 450k and 3M
 # for L, D in [(2, 48), (3, 112), (5, 224)]:

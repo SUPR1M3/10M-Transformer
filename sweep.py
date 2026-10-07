@@ -31,12 +31,13 @@ def train_run(config, n_tokens, eval_data, eval_every=None, curve_eval_size=4096
         batch = sample_batch(sub, config["B"], config["max_digits"])
         training_step(model, optimizer, batch[:, :-1], batch[:, 1:], mask, config["aux_factor"])
         if eval_every and (s + 1) % eval_every == 0:
-            curve.append(((s + 1) * config["B"] * T, float(jitted_loss(model, cx, cy, mask))))
+            curve.append(((s + 1) * config["B"] * T, float(jitted_loss(model, cx, cy, mask)[0])))
 
-    final = float(jitted_loss(model, ex, ey, mask))
+    final, final_aux_loss = eval_full(model, ex, ey, mask)
     param_cts = n_params(model, config)
     return {"N": param_cts[0], "N_total": param_cts[1], "N_with_emb": param_cts[2],
-            "D": steps * config["B"] * T, "steps": steps, "loss": final, "curve": curve}
+            "D": steps * config["B"] * T, "steps": steps, "loss": final, "aux_loss": final_aux_loss,
+            "curve": curve}
 
 # eval_data = sample_batch(jax.random.key(12345), 20_000, 5)
 
@@ -50,7 +51,7 @@ def train_run(config, n_tokens, eval_data, eval_every=None, curve_eval_size=4096
 
 
 RESULTS = "results/runs.csv"
-FIELDS = ["arch", "max_digits", "L", "D_model", "lr", "C", "C_actual", "N", "N_total", "N_with_emb", "D", "steps", "loss", "tokens_per_s", "seed"]
+FIELDS = ["arch", "max_digits", "L", "D_model", "lr", "C", "C_actual", "N", "N_total", "N_with_emb", "D", "steps", "loss", "aux_loss", "tokens_per_s", "seed"]
 
 def log_run(row, path=RESULTS):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -66,3 +67,8 @@ def save_pilot(result, cfg, path="results/pilot"):
     name = f"n{cfg['max_digits']}_L{cfg['L']}_D{cfg['D']}_lr{cfg['learning_rate']:g}.json"
     with open(os.path.join(path, name), "w") as f:
         json.dump({**result, "lr": cfg["learning_rate"], "max_digits": cfg["max_digits"]}, f)
+
+
+def eval_full(model, In, Out, mask, chunk=5000):
+    outs = [jitted_loss(model, In[i:i + chunk], Out[i:i + chunk], mask) for i in range(0, len(In), chunk)]
+    return (sum(float(out[0]) for out in outs)/len(outs), sum(float(out[1]) for out in outs)/len(outs))

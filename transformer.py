@@ -87,7 +87,7 @@ def calc_total_loss(model, In, Out, mask, aux_factor):
 
 @nnx.jit
 def jitted_loss(model, In, Out, mask):
-    return ce_loss(model, In, Out, mask)[0]
+    return ce_loss(model, In, Out, mask)
 
 def Optimizer(model, config, stepct):
     schedule = optax.warmup_cosine_decay_schedule(

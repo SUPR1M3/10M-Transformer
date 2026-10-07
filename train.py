@@ -35,7 +35,7 @@ def train_model(config, train, test, epochs = 2):
             loss = training_step(model, optimizer, x, y, mask, config["aux_factor"])
             step+=1
             if(step%500==0):
-                test_loss = jitted_loss(model, test_jax[:,:-1], test_jax[:,1:], mask)
+                test_loss = jitted_loss(model, test_jax[:,:-1], test_jax[:,1:], mask)[0]
                 print(f"epoch {ep} step {step}/{total_steps} "
                       f"train {float(loss):.4f} test {float(test_loss):.4f}")
     return model, optimizer

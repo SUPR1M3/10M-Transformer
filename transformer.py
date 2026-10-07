@@ -27,7 +27,7 @@ class AttentionBlock(nnx.Module):
         k = k.reshape(B, S, self.H, self.Dh)
         v = v.reshape(B, S, self.H, self.Dh)
 
-        #Add RoPE here later
+        #TODO: Add RoPE here later
 
         scores = jnp.einsum('bqhd,bkhd->bhqk', q,k)/ jnp.sqrt(self.Dh)
         mask = jnp.tril(jnp.ones((S,S), dtype = bool))

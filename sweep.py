@@ -50,7 +50,7 @@ def train_run(config, n_tokens, eval_data, eval_every=None, curve_eval_size=4096
 
 
 RESULTS = "results/runs.csv"
-FIELDS = ["arch", "max_digits", "L", "D_model", "lr", "C", "C_actual", "N", "N_total", "D", "steps", "loss", "tokens_per_s", "seed"]
+FIELDS = ["arch", "max_digits", "L", "D_model", "lr", "C", "C_actual", "N", "N_total", "N_with_emb", "D", "steps", "loss", "tokens_per_s", "seed"]
 
 def log_run(row, path=RESULTS):
     os.makedirs(os.path.dirname(path), exist_ok=True)

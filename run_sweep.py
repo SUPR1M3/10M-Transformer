@@ -10,11 +10,11 @@ N_DIGITS   = 10
 ARCH       = os.environ.get("ARCH", "dense")
 SEED       = int(os.environ.get("SEED", 0))
 DRY_RUN    = os.environ.get("DRY_RUN") == "1"
-BUDGETS    = [3e12, 1e13, 3e13, 1e14, 3e14, 1e15]
+MAX_TOKENS = int(float(os.environ.get("MAX_TOKENS", 4e8)))
+BUDGETS    = [float(x) for x in os.environ.get("BUDGETS", "3e12,1e13,3e13,1e14,3e14,1e15").split(",")]
 LADDER     = [(1, 32), (1, 48), (2, 48), (2, 64), (2, 96), (3, 112),
               (4, 128), (4, 176), (5, 224), (6, 256), (6, 384)]
 MIN_STEPS  = 200
-MAX_TOKENS = 400_000_000
 
 def lr_rule(N):
     return min(3e-3, max(7e-4, 3e-3 * (N / 56_000) ** -0.276))

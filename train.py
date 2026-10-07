@@ -32,7 +32,7 @@ def train_model(config, train, test, epochs = 2):
         for i in range(epoch_steps):
             batch = train_jax[perm[i*config["B"]:(i+1)*config["B"]]]
             x, y = batch[:, :-1], batch[:, 1:]
-            loss = training_step(model, optimizer, x, y, mask)
+            loss = training_step(model, optimizer, x, y, mask, config["aux_factor"])
             step+=1
             if(step%500==0):
                 test_loss = jitted_loss(model, test_jax[:,:-1], test_jax[:,1:], mask)

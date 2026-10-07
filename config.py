@@ -1,13 +1,14 @@
 import jax.numpy as jnp
 
-
-def make_config(L, D, max_digits=5, B=64, lr=1e-3, head_dim=16, seed=0, ff_mult=4):
+def make_config(L, D, max_digits=5, B=64, lr=1e-3, head_dim=16, seed=0, ff_mult=4,
+                arch="dense", n_experts=8, top_k=1, aux_factor=0.01):
     assert D % head_dim == 0, f"D={D} not divisible by head_dim={head_dim}"
     return {
         "B": B, "D": D, "F": ff_mult * D, "F/D": ff_mult,
         "L": L, "H": D // head_dim,
         "max_digits": max_digits, "seq_len": 3 * max_digits + 3,
         "seed": seed, "vocab_size": 13, "learning_rate": lr,
+        "arch": arch, "E": n_experts, "k": top_k, "aux_factor": aux_factor,
     }
 
 

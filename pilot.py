@@ -7,7 +7,7 @@ import os
 TOKENS = int(os.environ.get("TOKENS", 50_000_000))
 EVAL_EVERY = int(os.environ.get("EVAL_EVERY", 500))
 N_DIGITS = 10
-eval_data = sample_batch(jax.random.key(12345), 20_000, N_DIGITS)   # fixed held-out set
+eval_data = sample_batch(jax.random.key(12345), 20_000, N_DIGITS)
 
 #55k, 450k, 3M
 for L, D in [(2, 48), (3, 112), (5, 224)]:

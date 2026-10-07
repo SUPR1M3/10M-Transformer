@@ -5,14 +5,14 @@ from flax import nnx
 from transformer import Transformer, Optimizer, training_step, jitted_loss
 import csv, json, os
 
-def n_params(model, exclude_embeddings=True):
-    state = nnx.state(model, nnx.Param)
-    total = sum(p.size for p in jax.tree.leaves(state))
-    if exclude_embeddings:
-        emb = sum(p.size for p in jax.tree.leaves(nnx.state(model.embeddings, nnx.Param)))
-        emb += model.head.kernel.size
-        total -= emb
-    return total
+def n_params(model, config):
+    count = lambda m: sum(p.size for p in jax.tree.leaves(nnx.state(m, nnx.Param)))
+    with_emb = count(model)
+    total = with_emb - count(model.embeddings) - model.head.kernel.size
+    active = total
+    if config.get("arch") == "moe":
+        active -= config["L"] * (config["E"] - config["k"]) * 2 * config["D"] * config["F"]
+    return active, total, with_emb
 
 def train_run(config, n_tokens, eval_data, eval_every=None, curve_eval_size=4096):
     T = config["seq_len"] - 1
@@ -29,15 +29,16 @@ def train_run(config, n_tokens, eval_data, eval_every=None, curve_eval_size=4096
     for s in range(steps):
         key, sub = jax.random.split(key)
         batch = sample_batch(sub, config["B"], config["max_digits"])
-        training_step(model, optimizer, batch[:, :-1], batch[:, 1:], mask)
+        training_step(model, optimizer, batch[:, :-1], batch[:, 1:], mask, config["aux_factor"])
         if eval_every and (s + 1) % eval_every == 0:
             curve.append(((s + 1) * config["B"] * T, float(jitted_loss(model, cx, cy, mask))))
 
     final = float(jitted_loss(model, ex, ey, mask))
-    return {"N": n_params(model), "N_total": n_params(model, False),
+    param_cts = n_params(model, config)
+    return {"N": param_cts[0], "N_total": param_cts[1], "N_with_emb": param_cts[2],
             "D": steps * config["B"] * T, "steps": steps, "loss": final, "curve": curve}
 
-# eval_data = sample_batch(jax.random.key(12345), 20_000, 5)   # fixed held-out set
+# eval_data = sample_batch(jax.random.key(12345), 20_000, 5)
 
 #dry run with 55k, 450k and 3M
 # for L, D in [(2, 48), (3, 112), (5, 224)]:

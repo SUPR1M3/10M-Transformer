@@ -44,19 +44,19 @@ class MLP(nnx.Module):
         self.down_proj = nnx.Linear(config["F"], config["D"], rngs=rngs)
     
     def __call__(self, x):
-        return self.down_proj(jax.nn.gelu(self.up_proj(x)))
+        return self.down_proj(jax.nn.gelu(self.up_proj(x))), 0.0
 
 class TransformerBlock(nnx.Module):
     def __init__(self, config, rngs):
         self.ln1 = nnx.LayerNorm(config["D"], rngs=rngs)
         self.attention = AttentionBlock(config, rngs)
         self.ln2 = nnx.LayerNorm(config["D"], rngs=rngs)
-        self.mlp = MLP(config, rngs)
+        self.mlp = MoE(config, rngs) if config.get("arch", "dense") == "moe" else MLP(config, rngs)
 
     def __call__(self, x):
         x = x + self.attention(self.ln1(x))
-        x = x + self.mlp(self.ln2(x))
-        return x
+        h, aux_loss = self.mlp(self.ln2(x))
+        return x + h, aux_loss
 
 class Transformer(nnx.Module):
     def __init__(self, config, rngs):
@@ -66,21 +66,28 @@ class Transformer(nnx.Module):
         self.head = nnx.Linear(config["D"], config["vocab_size"], use_bias = False, rngs=rngs)
 
     def __call__(self, x):
-        act = self.embeddings(x)
+        activations = self.embeddings(x)
+        total_aux_loss = 0.0
         for block in self.blocks:
-            act = block(act)
-        act = self.final_layernorm(act)
-        return self.head(act)
+            activations, aux_loss = block(activations)
+            total_aux_loss+= aux_loss
+        activations = self.final_layernorm(activations)
+        return self.head(activations), total_aux_loss / len(self.blocks)
 
 
-def calc_loss(model, In, Out, mask):
-    logits = model(In)
+def ce_loss(model, In, Out, mask):
+    logits, aux_loss = model(In)
     CE_loss = optax.softmax_cross_entropy_with_integer_labels(logits, Out)
-    return (CE_loss*mask).sum()/(In.shape[0]*mask.sum())
+    return (CE_loss * mask).sum() / (In.shape[0] * mask.sum()), aux_loss
+
+
+def calc_total_loss(model, In, Out, mask, aux_factor):
+    CE_loss, aux_loss = ce_loss(model, In, Out, mask)
+    return CE_loss + aux_factor * aux_loss
 
 @nnx.jit
 def jitted_loss(model, In, Out, mask):
-    return calc_loss(model, In, Out, mask)
+    return ce_loss(model, In, Out, mask)[0]
 
 def Optimizer(model, config, stepct):
     schedule = optax.warmup_cosine_decay_schedule(
@@ -95,10 +102,44 @@ def Optimizer(model, config, stepct):
 
 
 @nnx.jit
-def training_step(model, optimizer, In, Out, mask):
-    loss, grad = nnx.value_and_grad(calc_loss)(model, In, Out, mask)
+def training_step(model, optimizer, In, Out, mask, aux_factor):
+    loss, grad = nnx.value_and_grad(calc_total_loss)(model, In, Out, mask, aux_factor)
     optimizer.update(model, grad)
     return loss
+
+
+class MoE(nnx.Module):
+    def __init__(self, config, rngs):
+        self.E, self.k = config["E"], config["k"]
+        self.router = nnx.Linear(config["D"], self.E, use_bias=False, rngs=rngs)
+        self.w_up = nnx.Param(jax.random.normal(rngs.params(), (self.E, config["D"], config["F"])) / jnp.sqrt(config["D"]))
+        self.w_down = nnx.Param(jax.random.normal(rngs.params(), (self.E, config["F"], config["D"])) / jnp.sqrt(config["F"]))
+
+    def __call__(self, x):
+        B, T, D = x.shape
+        x_flattened = x.reshape(-1, D) #(B*T, D)
+        M = x_flattened.shape[0]
+
+        probs = jax.nn.softmax(self.router(x_flattened), axis=-1)
+        gates, experts = jax.lax.top_k(probs, self.k) #(B*T, K), (B*T, K)
+        if self.k > 1:
+            gates = gates / gates.sum(-1, keepdims=True) #(B*T, K)
+
+        experts_flattened = experts.reshape(-1)
+        order = jnp.argsort(experts_flattened)
+        x_sorted = x_flattened[order // self.k]
+        counts = jnp.bincount(experts_flattened, length=self.E) #(B*k, D)
+        group_sizes = counts.astype(jnp.int32)
+
+        h = jax.lax.ragged_dot(x_sorted, self.w_up[...], group_sizes) #(B*k, F)
+        y_sorted = jax.lax.ragged_dot(jax.nn.gelu(h), self.w_down[...], group_sizes) #(B*k, D)
+
+        y = y_sorted[jnp.argsort(order)].reshape(M, self.k, D)
+        out = (y * gates[..., None]).sum(axis=1) #(B, D)
+        real_split = counts/experts_flattened.size
+        aux_loss = self.E * jnp.sum(real_split * probs.mean(axis=0))
+        return out.reshape(B, T, D), aux_loss
+
 
 
 if __name__ == "__main__":

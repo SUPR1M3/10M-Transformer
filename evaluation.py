@@ -13,11 +13,11 @@ def forward(model, x):
     return model(x)
 
 def generate(model, config, data):
-    p = 2 * config["max_digits"] + 2                  # prompt length through "=" → 8
-    seq = jnp.asarray(data).at[:, p:].set(0)    # erase the true answer
-    for t in range(p, config["seq_len"]):             # fill positions 8..11
-        logits = forward(model, seq[:, :-1])    # (B, 11, V)
-        nxt = jnp.argmax(logits[:, t - 1], axis=-1)   # output at t-1 predicts token t
+    p = 2 * config["max_digits"] + 2
+    seq = jnp.asarray(data).at[:, p:].set(0)
+    for t in range(p, config["seq_len"]):
+        logits = forward(model, seq[:, :-1])[0]#(B,11, V)
+        nxt = jnp.argmax(logits[:, t - 1], axis=-1)
         seq = seq.at[:, t].set(nxt)
     return seq
 

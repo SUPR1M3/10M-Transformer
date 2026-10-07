@@ -15,19 +15,24 @@ def plot_pilot(out="figures/pilot_curves.png"):
     ax.legend(fontsize=7)
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
 
-def isoflop_valleys(df):
-    """For each budget C: fit a parabola to log(loss) vs log(N), and return its minimum."""
+def isoflop_valleys(df, max_loss=0.5, window=2):
+    """Per budget: fit a parabola to log(loss) vs log(N) near the minimum."""
     rows = []
     for C, g in df.groupby("C"):
+        g = g[g["loss"] < max_loss].sort_values("N")#drop runs stuck on plateau
+        if len(g) < 3:
+            continue
+        i = int(np.argmin(g["loss"].values))
+        g = g.iloc[max(0, i - window): i + window + 1]#min plus up to 2 neighbors per side
         if len(g) < 3:
             continue
         x, y = np.log(g["N"]), np.log(g["loss"])
         c2, c1, c0 = np.polyfit(x, y, 2)
         log_n_opt = -c1 / (2 * c2)
-        valid = c2 > 0 and x.min() < log_n_opt < x.max()      # a real valley, inside the grid
+        valid = c2 > 0 and x.min() < log_n_opt < x.max()
         n_opt = np.exp(log_n_opt)
-        rows.append({"C": C, "N_opt": n_opt, "D_opt": C / (6 * n_opt),
-                     "valid": valid, "coef": (c2, c1, c0)})
+        rows.append({"C": C, "N_opt": n_opt, "D_opt": C / (6 * n_opt), "valid": valid,
+                     "coef": (c2, c1, c0), "N_lo": g["N"].min(), "N_hi": g["N"].max()})
     return pd.DataFrame(rows)
 
 def plot_isoflop(df, arch, out):
@@ -42,7 +47,7 @@ def plot_isoflop(df, arch, out):
         row = v[v["C"] == C]
         if len(row):
             c2, c1, c0 = row["coef"].iloc[0]
-            xs = np.linspace(np.log(g["N"].min()), np.log(g["N"].max()), 100)
+            xs = np.linspace(np.log(row["N_lo"].iloc[0]), np.log(row["N_hi"].iloc[0]), 100)
             ax1.plot(np.exp(xs), np.exp(c2 * xs**2 + c1 * xs + c0), color=col, label=f"C={C:.0e}")
             if row["valid"].iloc[0]:
                 ax1.scatter(row["N_opt"], np.exp(c2 * np.log(row["N_opt"])**2
@@ -72,4 +77,8 @@ if __name__ == "__main__":
         df = pd.read_csv("results/runs.csv")
         for arch, g in df.groupby("arch"):
             a = plot_isoflop(g, arch, f"figures/isoflop_{arch}.png")
+            v = isoflop_valleys(g)
+            v["tokens_per_param"] = v["D_opt"] / v["N_opt"]
+            print(f"\n{arch} valleys:")
+            print(v[["C", "N_opt", "D_opt", "tokens_per_param", "valid"]].to_string(index=False))
             print(f"{arch}: N_opt ∝ C^{a:.3f}" if a is not None else f"{arch}: not enough valid valleys")

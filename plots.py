@@ -43,15 +43,17 @@ def plot_isoflop(df, arch, out):
     for i, C in enumerate(budgets):
         g = df[df["C"] == C]
         col = plt.cm.viridis(i / max(1, len(budgets) - 1))
-        ax1.scatter(g["N"], g["loss"], color=col, s=15)
+        stuck = g["loss"] >= 0.5                                   # runs that never left the plateau
+        ax1.scatter(g.loc[~stuck, "N"], g.loc[~stuck, "loss"], color=col, s=15)
+        ax1.scatter(g.loc[stuck, "N"], g.loc[stuck, "loss"], facecolors="none", edgecolors=col, s=15)
         row = v[v["C"] == C]
-        if len(row):
+        if len(row) and row["valid"].iloc[0]:                      # draw only valid fits
             c2, c1, c0 = row["coef"].iloc[0]
             xs = np.linspace(np.log(row["N_lo"].iloc[0]), np.log(row["N_hi"].iloc[0]), 100)
             ax1.plot(np.exp(xs), np.exp(c2 * xs**2 + c1 * xs + c0), color=col, label=f"C={C:.0e}")
-            if row["valid"].iloc[0]:
-                ax1.scatter(row["N_opt"], np.exp(c2 * np.log(row["N_opt"])**2
-                            + c1 * np.log(row["N_opt"]) + c0), marker="*", s=120, color=col)
+            n_opt = row["N_opt"].iloc[0]
+            ax1.scatter(n_opt, np.exp(c2 * np.log(n_opt)**2 + c1 * np.log(n_opt) + c0),
+                        marker="*", s=120, color=col)
     ax1.set(xscale="log", yscale="log", xlabel="N (non-embedding params)",
             ylabel="final test loss", title=f"IsoFLOP profiles ({arch})")
     ax1.legend(fontsize=7)
@@ -69,6 +71,25 @@ def plot_isoflop(df, arch, out):
     fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
     return a
 
+def plot_comparison(df, out="figures/dense_vs_moe.png"):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
+    colors = {"dense": "C0", "moe": "C1"}
+    for arch, g in df.groupby("arch"):
+        col = colors.get(arch)
+        best = g.groupby("C")["loss"].min()
+        ax1.loglog(best.index, best.values, "o-", color=col, label=arch)
+        v = isoflop_valleys(g); v = v[v["valid"]]
+        ax2.loglog(v["C"], v["N_opt"], "o", color=col, label=f"{arch} valleys")
+        if len(v) >= 2:
+            a, b = np.polyfit(np.log(v["C"]), np.log(v["N_opt"]), 1)
+            cs = np.logspace(np.log10(v["C"].min()), np.log10(v["C"].max()), 50)
+            ax2.loglog(cs, np.exp(b) * cs**a, "--", color=col, label=f"{arch}: C^{a:.2f}")
+    ax1.set(xlabel="compute C (FLOPs)", ylabel="best final loss", title="Loss frontier")
+    ax2.set(xlabel="compute C (FLOPs)", ylabel="compute-optimal N (active)", title="N_opt vs C")
+    ax1.legend(); ax2.legend()
+    fig.tight_layout(); fig.savefig(out, dpi=150); plt.close(fig)
+
+
 if __name__ == "__main__":
     os.makedirs("figures", exist_ok=True)
     if glob.glob("results/pilot/*.json"):
@@ -82,3 +103,4 @@ if __name__ == "__main__":
             print(f"\n{arch} valleys:")
             print(v[["C", "N_opt", "D_opt", "tokens_per_param", "valid"]].to_string(index=False))
             print(f"{arch}: N_opt ∝ C^{a:.3f}" if a is not None else f"{arch}: not enough valid valleys")
+        plot_comparison(df)

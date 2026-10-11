@@ -36,8 +36,7 @@ def sample_batch(key, B, n):
         s = x + y + carry
         return s // 10, s % 10
 
-    carry, dc = jax.lax.scan(add_column, jnp.zeros(B, jnp.int32),
-                             (da.T[::-1], db.T[::-1]))           # least significant first
+    carry, dc = jax.lax.scan(add_column, jnp.zeros(B, jnp.int32),(da.T[::-1], db.T[::-1]))
     dc = jnp.concatenate([carry[None], dc[::-1]], axis=0).T      # (B, n+1), most significant first
 
     def pad(d):                                                  # leading zeros → space
@@ -51,20 +50,15 @@ def sample_batch(key, B, n):
 if __name__ == "__main__":
     config = Config().config
     tokenizer = Tokenizer()
-    # train, test = gen_data(config, tokenizer)
-    # print(train.shape)
-    # print(test.shape)
-    # print(repr(tokenizer.decode(train[0])))
-    # print(tokenizer.decode(tokenizer.encode("123+ 45= 168")) == "123+ 45= 168")
     n = 10
     batch = sample_batch(jax.random.key(0), 1000, n)
 
     for r in batch:
         s = tokenizer.decode(r)
-        assert len(s) == 3 * n + 3, s                       # fixed length (33 for n=10)
-        assert s[n] == "+" and s[2 * n + 1] == "=", s       # symbols in the right positions
+        assert len(s) == 3 * n + 3, s
+        assert s[n] == "+" and s[2 * n + 1] == "=", s
         a, b, c = int(s[:n]), int(s[n + 1:2 * n + 1]), int(s[2 * n + 2:])
-        assert a + b == c, s                                 # the arithmetic is correct
+        assert a + b == c, s
 
     print("sampler OK")
     for r in batch[:3]:

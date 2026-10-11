@@ -13,7 +13,6 @@ def make_config(L, D, max_digits=5, B=64, lr=1e-3, head_dim=16, seed=0, ff_mult=
 
 
 def make_mask(config):
-    # Loss only on answer tokens: targets at index >= 2*max_digits+1 (everything after "=")
     return (jnp.arange(config["seq_len"] - 1) >= 2 * config["max_digits"] + 1).astype(jnp.float32)
 
 
